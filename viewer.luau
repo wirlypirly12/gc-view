@@ -1,63 +1,19 @@
-local dependencies = {
-    "iscclosure",
-    "isexecutorclosure",
-    "getinfo",
-    "getgc",
-    "cloneref",
-    "getconstants"
+
+local Class = loadstring(game:HttpGet("https://raw.githubusercontent.com/wirlypirly12/luau-utility/refs/heads/main/class.luau"))()
+local GCView = Class.new{
+    dependencies = {
+        "iscclosure",
+        "isexecutorclosure",
+        "getinfo",
+        "getgc",
+        "cloneref",
+        "getconstants"
+    },
+    name = "GCView"
 }
 
-for i, depend in next, dependencies do
-    local func = getgenv()[depend]
-    assert(func, "\n"..depend.. " is not supported by "..identifyexecutor().."\nplease use a different exploit if you'd like to use gcview")
-end
-
-local Services; Services = setmetatable({}, {__index = function(self, key)
-    if self == Services then
-        local service = cloneref(game:GetService(key))
-        rawset(self, key, service)
-        return service
-    end
-end})
-
-local Class = {}
-Class.__index = Class
-
-function Class:Log(func, msg)
-    for i, v in ipairs(msg) do
-        msg[i] = tostring(v)
-    end
-    msg = table.concat(msg, " ")
-    if func == error then
-        error(msg, 3)
-    else
-        func(msg)
-    end
-end
-
-function Class:Proxy(f, msg, self)
-    return Class:Log(f, {"[" .. tostring(self) .. "] ~", table.unpack(msg)})
-end
-
-function Class.new(module)
-    local mt = getmetatable(module) or {}
-    local self = setmetatable({}, {__index = module, __tostring = mt.__tostring})
-
-    function self:Log(...)
-        return Class:Proxy(warn, {...}, self)
-    end
-
-    function self:Error(...)
-        return Class:Proxy(error, {...}, self)
-    end
-
-    return self
-end
-
-local GCView = setmetatable({}, {__tostring = function() return "GCView" end})
-
-function GCView.new()
-    local self = Class.new(GCView)
+function GCView.new(name: string?)
+    local self = GCView:create(name)
     self.closures = self:Collect()
 
     self._running = false
@@ -69,14 +25,14 @@ end
 
 function GCView:Start()
     if self._running then
-        self:Log("Already started")
+        self:log("Already started")
         return
     end
 
     self._running = true
     self._paused = false
 
-    self:Log("Started")
+    self:log("Started")
 
     self._thread = task.spawn(function()
         while true do
@@ -90,7 +46,7 @@ end
 
 function GCView:End()
     if not self._running then
-        self:Log("Not running")
+        self:log("Not running")
         return
     end
 
@@ -101,26 +57,26 @@ function GCView:End()
     if self._thread then
         task.cancel(self._thread)
         self._thread = nil
-        self:Log("Closed update thread")
+        self:log("Closed update thread")
     end
 
 
-    self:Log("Ended")
+    self:log("Ended")
 end
 
 function GCView:Pause()
     if not self._running then
-        self:Log("Not running")
+        self:log("Not running")
         return
     end
 
     if self._paused then
-        self:Log("Already paused")
+        self:log("Already paused")
         return
     end
 
     self._paused = true
-    self:Log("Paused")
+    self:log("Paused")
 end
 
 function GCView:Collect()
@@ -137,7 +93,7 @@ function GCView:Collect()
         local success, info = pcall(getinfo, closure)
 
         if not success then
-            self:Error("error while collecting closures:", info)
+            error("issue collecting closures: "..info, 2)
         end
 
         -- split Path.To.Source into {Path, To, Source}
@@ -159,17 +115,12 @@ function GCView:Collect()
         num += 1
     end
 
-    self:Log(("Collected %d closures"):format(tostring(num)))
+    self:log(("Collected %d closures"):format(tostring(num)))
     return collected
 end
 
 function GCView:SanatizeParameters(params)
-    self:Log("Sanatize begin")
-
-    local function RemoveIndex(index, reason)
-        self:Log("Removed", index, "from params ("..tostring(reason)..")")
-        params[index] = nil
-    end
+    self:log("Sanatize begin")
 
     local expected = {
         script = {required = false, expected = {"Instance", "string"}},
@@ -186,7 +137,7 @@ function GCView:SanatizeParameters(params)
 
         -- remove unexpected params
         if expt == nil then
-            RemoveIndex(index, "not expected")
+            params[index] = nil
             continue
         end
 
@@ -195,7 +146,7 @@ function GCView:SanatizeParameters(params)
 
         if not table.find(allowed_types, typeof(value)) then
             local reason = #allowed_types > 1 and "multi type mismatch" or "single type mismatch"
-            RemoveIndex(index, reason)
+            params[index] = nil
             continue
         end
     end
@@ -205,7 +156,7 @@ function GCView:SanatizeParameters(params)
             self:Error("missing required:", index)
         end
     end
-    self:Log("Sanatize end")
+    self:log("Sanatize end")
     return params
 end
 
@@ -275,7 +226,7 @@ end
 --     name = "FindMeOrDont",
 --     nconsts = 1,
 --     nups = 0,
---     line = 270,
+--     line = 220,
 --     script = getfenv().script
 -- }
 -- Target()
